@@ -3,7 +3,7 @@ import json
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox
 import threading
-from langchain_ollama import OllamaLLM  # Updated import to use OllamaLLM
+from langchain_ollama import OllamaLLM 
 
 CONVERSATION_DIR = "conversations"
 if not os.path.exists(CONVERSATION_DIR):
@@ -327,51 +327,51 @@ class CodingAssistantApp:
 
     def generate_initial_response(self):
         if not self.main_llm:
-            self.main_llm = OllamaLLM(model=self.main_model_var.get())  # Updated to use OllamaLLM
-            self.helper1_llm = OllamaLLM(model=self.helper1_model_var.get())  # Updated to use OllamaLLM
-            self.helper2_llm = OllamaLLM(model=self.helper2_model_var.get())  # Updated to use OllamaLLM
+            self.main_llm = OllamaLLM(model=self.main_model_var.get()) 
+            self.helper1_llm = OllamaLLM(model=self.helper1_model_var.get())  
+            self.helper2_llm = OllamaLLM(model=self.helper2_model_var.get())
         prompt = create_initial_prompt(self.latest_request, self.chat_history)
-        self.latest_main_response = self.main_llm.invoke(prompt)  # Updated to use invoke
+        self.latest_main_response = self.main_llm.invoke(prompt) 
         self.chat_history.append({"role": "Main Developer", "content": self.latest_main_response})
         self.chat_history.append({"role": "System", "content": "Was this response helpful? (yes/no)"})
         self.update_chat_display()
         self.save_conversation()
 
     def consult_helpers(self):
-        # Create the prompt for the helpers based on the latest request and feedback
+
         helper_prompt = create_helper_prompt(self.latest_request, self.latest_main_response, self.chat_history, self.feedback_description)
         
-        # Generate and display Helper 1's response immediately
+        
         self.helper1_response = self.helper1_llm.invoke(helper_prompt)
         self.chat_history.append({"role": "Helper 1", "content": self.helper1_response})
         self.update_chat_display()
         self.save_conversation()
         
-        # Generate and display Helper 2's response immediately
+        
         self.helper2_response = self.helper2_llm.invoke(helper_prompt)
         self.chat_history.append({"role": "Helper 2", "content": self.helper2_response})
         self.update_chat_display()
         self.save_conversation()
         
-        # Create the improved prompt for the Main LLM, using the chat history (now including helpers' responses)
+        
         improved_prompt = create_improved_prompt(self.latest_request, self.chat_history, self.latest_main_response, 
                                                 self.helper1_response, self.helper2_response, self.feedback_description)
         
-        # Check token count to ensure the prompt fits within the Main LLM's context window
+        
         total_tokens = estimate_tokens(improved_prompt)
         main_model = self.main_model_var.get()
         if main_model in MODEL_CONTEXT_WINDOWS:
             context_window = MODEL_CONTEXT_WINDOWS[main_model]
             if total_tokens > 0.8 * context_window:
-                # If the prompt is too long, generate concise summaries from the helpers
+               
                 summary_prompt = "Your previous response was too long. Please provide a concise summary in 2-3 sentences."
                 helper1_summary = self.helper1_llm.invoke(summary_prompt)
                 helper2_summary = self.helper2_llm.invoke(summary_prompt)
-                # Use summaries in the improved prompt, but keep full responses in chat_history
+               
                 improved_prompt = create_improved_prompt(self.latest_request, self.chat_history, self.latest_main_response, 
                                                         helper1_summary, helper2_summary, self.feedback_description)
         
-        # Generate and display the Main LLM's response immediately
+        
         self.latest_main_response = self.main_llm.invoke(improved_prompt)
         self.chat_history.append({"role": "Main Developer", "content": self.latest_main_response})
         self.chat_history.append({"role": "System", "content": "Was this response helpful? (yes/no)"})
