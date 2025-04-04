@@ -21,7 +21,7 @@ ollama run deepseek-coder-v2
 ollama pull qwen2.5-coder:latest
 ollama ollama run deepseek-r1
 
-Run the App: Execute the Python script (e.g., python codecollab_ai.py) to launch the GUI.
+Run the App: Execute the Python script (e.g., python app.py) to launch the GUI.
 
 Select Models: Choose models for the main developer and helpers from the dropdown menus in the left sidebar.
 
