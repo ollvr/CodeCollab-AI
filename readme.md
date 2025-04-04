@@ -18,7 +18,7 @@ Install Ollama: Download and install Ollama from ollama.ai to run LLMs locally.
 Pull Required Models: Use Ollama to pull the models you want to use. For example
 
 ollama run deepseek-coder-v2
-ollama pull qwen2.5-coder:latest
+ollama run qwen2.5-coder:latest
 ollama ollama run deepseek-r1
 
 Run the App: Execute the Python script (e.g., python app.py) to launch the GUI.
