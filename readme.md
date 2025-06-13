@@ -1,77 +1,112 @@
-### CodeCollab AI: Collaborative LLM Coding Assistant
-Where multiple large language models team up to solve your programming problems.
+# CodeCollab AI - README
 
-## Introduction
-CodeCollab AI is an innovative coding assistant that simulates a collaborative environment where multiple large language models (LLMs) work together to solve programming problems. Inspired by the dynamics of a developer chatroom, the app allows users to interact with a main LLM that can call upon two helper LLMs for assistance when needed. This collaborative approach aims to provide more accurate and helpful responses to programming queries.
+Welcome to CodeCollab AI, a collaborative coding assistant application designed to enhance your programming experience by leveraging multiple AI models. This README will guide you through setting up, using, and customizing CodeCollab AI to suit your needs.
+
+## Table of Contents
+
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Customization](#customization)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
-Collaborative LLMs: A main LLM and two helper LLMs collaborate to solve problems.
-Conversation Management: Create, load, and delete conversations, each saved as a JSON file.
-User Feedback Loop: Provide feedback on responses to improve future answers.
-Model Selection: Choose from various LLMs for the main and helper roles.
-Token Management: Ensures prompts fit within the model's context window.
-Intuitive GUI: User-friendly interface for seamless interaction.
 
+CodeCollab AI offers a range of features to assist you in your coding tasks:
 
-## How to Use
-Install Ollama: Download and install Ollama from ollama.ai to run LLMs locally.
-Pull Required Models: Use Ollama to pull the models you want to use. For example
+- **Multi-AI Collaboration**: Utilize multiple AI models simultaneously to get comprehensive assistance.
+- **Conversation Management**: Easily manage and switch between different coding conversations.
+- **Export Functionality**: Save your conversations for future reference or sharing.
+- **Customizable AI Models**: Tailor the AI models to better fit your specific needs.
 
-ollama run deepseek-coder-v2
-ollama run qwen2.5-coder:latest
-ollama ollama run deepseek-r1
+## Prerequisites
 
-Run the App: Execute the Python script (e.g., python app.py) to launch the GUI.
+Before you begin, ensure you have the following installed:
 
-Select Models: Choose models for the main developer and helpers from the dropdown menus in the left sidebar.
+- Ollama installed
+- Python version >= 3.9
+- `langchain_ollama` package
 
-As an example, the app includes deepseek-coder-v2, qwen2.5-coder:latest, and deepseek-r1:8b, but you can customize these by modifying the get_available_models() function in the code
+## Installation
 
-Pay attention to change also the model context window with the correct values .
+To get started with CodeCollab AI, follow these steps:
 
-def get_available_models():
-    return ["deepseek-coder-v2", "qwen2.5-coder:latest", "deepseek-r1:8b"] # replace with the llms you wants
+1. **Clone the Repository**:
+   ```bash
+   git clone <https://github.com/ollvr/CodeCollab-AI.git>
+   cd <CodeCollabAI>
+   ```
 
+2. **Install Dependencies**:
+   ```bash
+   pip install langchain_ollama
+   ```
 
-Start a New Chat: Click "New Chat," name your conversation, and begin interacting.
+3. **Run the Application**:
+   ```bash
+   python app.py
+   ```
 
-Interact with the LLMs:
+## Usage
 
-Type your programming question or request in the input field and press "Send" or hit Enter.
-The main LLM will respond.
+### Starting the Application
 
-You’ll be asked if the response was helpful (type "yes" or "no").
+Launch the application using the command provided in the installation section. The application window will open, ready for you to start interacting with the AI.
 
-If "yes," the conversation continues or ends based on your next input.
-If "no," optionally provide feedback (or press Enter to skip), and the main LLM will consult the helpers to improve its response.
+### Using the Application
 
-Manage Conversations: Load or delete existing conversations from the sidebar.    
+1. **Select AI Models**: Choose the AI models that best suit your needs from the available options.
 
-## Dependencies
-To run CodeCollab AI, ensure you have the following installed:
+2. **Start a New Conversation**:
+   - Begin a new chat session to discuss your coding queries.
+   - Provide a name for your conversation when prompted to keep your sessions organized.
 
-Python 3.x: The app is written in Python.
-Tkinter: Used for the GUI; typically included with Python, but ensure it’s available on your system.
-Langchain Community: Install via pip:
+3. **Interact with the AI**:
+   - Type your questions or coding problems to receive assistance.
+   - The AI will respond with suggestions, code snippets, or explanations based on your input.
 
-pip install langchain-community
+4. **Manage Conversations**:
+   - Easily switch between different conversations to keep your work organized.
+   - Delete old conversations that are no longer needed.
 
-Ollama: Required to run LLMs locally. Install from ollama.ai.
+5. **Export a Conversation**:
+   - Save your conversation history to a text file for future reference or documentation.
 
-Additionally, pull the necessary models in Ollama (e.g., deepseek-coder-v2, qwen2.5-coder,deepseek-r1) to ensure the app functions correctly. 
+## Customization
 
-You can customize the available models by editing the get_available_models() function in the code as described above.
+### Changing AI Models
 
+You can customize the AI models used by modifying the `get_available_models` function in the code. This allows you to add or remove models based on your preferences or requirements.
 
-## Upcoming Features
-Chatroom with PDF Support: Future versions will allow LLMs to collaborate on answering questions about PDF documents uploaded by the user.
+### Customizing the Application
 
-Interpreter Integration: Plans to add an interpreter for executing and testing code snippets directly within the app.
+The application can be customized further by modifying the code to change behaviors, add new features, or adjust existing ones to better fit your workflow.
 
+## Troubleshooting
 
-## Notes
-Performance: Response times may vary depending on your hardware.
+If you encounter any issues while using CodeCollab AI, here are some common troubleshooting steps:
 
-Contributing: If you enjoy using CodeCollab AI, consider starring the project on GitHub! 
+- **Module Import Errors**: Ensure all dependencies are correctly installed. If you encounter import errors, verify the installation steps.
+- **Application Not Starting**: Check that you have the correct version of Python and that all necessary libraries are installed.
+- **Conversation Issues**: Ensure that the application has the necessary permissions to read and write files, especially in the `conversations` directory.
 
-We welcome contributions and feedback to make the app even better.
+## Contributing
+
+We welcome contributions to CodeCollab AI! If you have suggestions for improvements or new features, please follow these steps:
+
+1. Fork the repository.
+2. Create a new branch for your feature or bug fix.
+3. Commit your changes with clear, descriptive messages.
+4. Push your changes to your fork.
+5. Submit a pull request with a detailed description of your changes.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for more details.
+
+---
+
+Thank you for using CodeCollab AI! We hope this application enhances your coding experience and makes your development process more efficient and enjoyable. If you have any questions or feedback, please don't hesitate to reach out.

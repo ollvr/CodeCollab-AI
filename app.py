@@ -1,25 +1,26 @@
 import os
 import json
 import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
+from tkinter import ttk, filedialog, messagebox , simpledialog
 import threading
-from langchain_ollama import OllamaLLM 
+import webbrowser
+from langchain_ollama import OllamaLLM
 
 CONVERSATION_DIR = "conversations"
 if not os.path.exists(CONVERSATION_DIR):
-    os.makedirs(CONVERSATION_DIR)
+    os.makedirs(CONVERSATION_DIR)   
 
 MODEL_CONTEXT_WINDOWS = {
-    "deepseek-coder": 128000,
-    "qwen2.5-coder:latest": 128000,
-    "deepseek-r1": 128000,
+    "qwen3:4b": 40000,
+    "qwen2.5-coder:latest":32000,
+    "gemma3:4b": 128000,
 }
 
 def estimate_tokens(text):
     return len(text) // 4
 
 def get_available_models():
-    return ["qwen2.5-coder:latest", "deepseek-coder", "deepseek-r1"]
+    return ["qwen2.5-coder:latest", "qwen3:4b", "gemma3:4b"]
 
 def load_conversation(filename):
     try:
@@ -55,13 +56,12 @@ Please interpret their request and respond with a solution that meets their goal
 
 def create_helper_prompt(request, main_response, chat_history, feedback_description=""):
     history_text = "\n".join([f"{entry['role']}: {entry['content']}" for entry in chat_history])
-    print("HISTORY TEXT :",history_text)
     feedback_text = f"The programmer said: {feedback_description}" if feedback_description else "The programmer didn't provide specific feedback."
     return f"""We're in a group discussion to help a programmer. Here's the conversation so far:
 
 {history_text}
 
-The programmer asked: 
+The programmer asked:
 
 {request}
 
@@ -108,12 +108,58 @@ Now, it’s my turn again. Using the helpers’ suggestions and the history:
 - Correct any mistakes from my previous attempt.
 """
 
+class RoundedButton(ttk.Button):
+    def __init__(self, master=None, **kw):
+        self.radius      = kw.pop('radius', 10)
+        self.color       = kw.pop('color', "#ffffff")
+        self.hover_color = kw.pop('hover_color', "#28282c")
+        self.text_color  = kw.pop('text_color', 'white')
+        super().__init__(master, **kw)
+
+        style = ttk.Style()
+        style.configure('Rounded.TButton',
+                        font=('Helvetica', 10, 'bold'),
+                        borderwidth=1,
+                        padding=8,
+                        background=self.color,
+                        foreground=self.text_color,
+                        borderradius=self.radius)
+
+        # **Match padding & border in hover style**
+        style.configure('RoundedHover.TButton',
+                        font=('Helvetica', 10, 'bold'),
+                        borderwidth=1,
+                        padding=8,
+                        background=self.hover_color,
+                        foreground=self.text_color,
+                        borderradius=self.radius)
+
+        # **Prevent relief/padding changes when pressed**
+        style.map('Rounded.TButton',
+                  background=[('active', self.hover_color)],
+                  foreground=[('active', self.text_color)],
+                  relief=[('pressed', 'flat'), ('!pressed', 'flat')],
+                  padding=[('pressed', 8), ('!pressed', 8)])
+
+        self.configure(style='Rounded.TButton')
+        #self.bind("<Enter>", self.on_enter)
+        #self.bind("<Leave>", self.on_leave)
+
+    """def on_enter(self, event):
+        self.configure(style='RoundedHover.TButton')
+
+    def on_leave(self, event):
+        self.configure(style='Rounded.TButton')"""
+
+
 class CodingAssistantApp:
     def __init__(self, root):
         self.root = root
         self.root.title("CodeCollab AI")
-        self.root.minsize(900, 600)
-        self.root.configure(bg="#1e1e2f")
+        self.root.minsize(1000, 700)
+        self.root.configure(bg="#f5f7fa")
+
+        self.configure_styles()
 
         self.chat_history = []
         self.current_conversation = None
@@ -127,104 +173,297 @@ class CodingAssistantApp:
         self.helper2_response = None
         self.feedback_description = ""
 
-        self.style = ttk.Style()
-        self.style.theme_use('clam')
-        self.style.configure("TLabel", font=("Roboto", 12), background="#1e1e2f", foreground="#ffffff")
-        self.style.configure("Sidebar.TLabel", font=("Roboto", 12, "bold"), foreground="#ffffff")
-        self.style.configure("TCombobox", font=("Roboto", 11), fieldbackground="#2a2a3b", background="#2a2a3b", foreground="#ffffff")
-        self.style.configure("TButton", font=("Roboto", 11), padding=5)
-        self.style.map("TButton", background=[('active', '#5e5e8d')], foreground=[('active', '#ffffff')])
+        self.main_frame = tk.Frame(root, bg="#f5f7fa")
+        self.main_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
-        self.main_frame = tk.Frame(root, bg="#1e1e2f")
-        self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.left_sidebar = tk.Frame(self.main_frame, bg="#ffffff", width=250)
+        self.left_sidebar.pack(side="left", fill="y", padx=0, pady=0)
+        self.left_sidebar.pack_propagate(False)
 
-        self.left_sidebar = tk.Frame(self.main_frame, bg="#2a2a3b", width=250, relief="flat", borderwidth=0)
-        self.left_sidebar.pack(side="left", fill="y", padx=(0, 5))
+        title_frame = tk.Frame(self.left_sidebar, bg="#ffffff", height=60)
+        title_frame.pack(fill="x", pady=(0, 10))
+        title_label = tk.Label(title_frame, text="CodeCollab", bg="#ffffff", fg="#2d3436",
+                              font=('Helvetica', 16, 'bold'))
+        title_label.pack(expand=True)
+
+        models_frame = tk.LabelFrame(self.left_sidebar, text="AI Models", bg="#ffffff", fg="#2d3436",
+                                    font=('Helvetica', 10, 'bold'), bd=0)
+        models_frame.pack(fill="x", padx=10, pady=(0, 10))
 
         models = get_available_models()
-        ttk.Label(self.left_sidebar, text="Main Developer", style="Sidebar.TLabel").pack(pady=(10, 5), padx=10)
+
+        main_model_frame = tk.Frame(models_frame, bg="#ffffff")
+        main_model_frame.pack(fill="x", pady=5)
+        ttk.Label(main_model_frame, text="Main Developer", style="SidebarHeader.TLabel").pack(anchor="w", padx=5)
         self.main_model_var = tk.StringVar(value=models[0])
-        self.main_model_menu = ttk.Combobox(self.left_sidebar, textvariable=self.main_model_var, values=models)
-        self.main_model_menu.pack(pady=5, padx=10, fill="x")
+        self.main_model_menu = ttk.Combobox(main_model_frame, textvariable=self.main_model_var,
+                                          values=models, style="TCombobox")
+        self.main_model_menu.pack(fill="x", padx=5, pady=2)
 
-        ttk.Label(self.left_sidebar, text="Helper 1", style="Sidebar.TLabel").pack(pady=(10, 5), padx=10)
-        self.helper1_model_var = tk.StringVar(value=models[0])
-        self.helper1_model_menu = ttk.Combobox(self.left_sidebar, textvariable=self.helper1_model_var, values=models)
-        self.helper1_model_menu.pack(pady=5, padx=10, fill="x")
+        helper1_frame = tk.Frame(models_frame, bg="#ffffff")
+        helper1_frame.pack(fill="x", pady=5)
+        ttk.Label(helper1_frame, text="Helper 1", style="SidebarHeader.TLabel").pack(anchor="w", padx=5)
+        self.helper1_model_var = tk.StringVar(value=models[1] if len(models) > 1 else models[0])
+        self.helper1_model_menu = ttk.Combobox(helper1_frame, textvariable=self.helper1_model_var,
+                                             values=models, style="TCombobox")
+        self.helper1_model_menu.pack(fill="x", padx=5, pady=2)
 
-        ttk.Label(self.left_sidebar, text="Helper 2", style="Sidebar.TLabel").pack(pady=(10, 5), padx=10)
-        self.helper2_model_var = tk.StringVar(value=models[0])
-        self.helper2_model_menu = ttk.Combobox(self.left_sidebar, textvariable=self.helper2_model_var, values=models)
-        self.helper2_model_menu.pack(pady=5, padx=10, fill="x")
+        helper2_frame = tk.Frame(models_frame, bg="#ffffff")
+        helper2_frame.pack(fill="x", pady=5)
+        ttk.Label(helper2_frame, text="Helper 2", style="SidebarHeader.TLabel").pack(anchor="w", padx=5)
+        self.helper2_model_var = tk.StringVar(value=models[2] if len(models) > 2 else models[0])
+        self.helper2_model_menu = ttk.Combobox(helper2_frame, textvariable=self.helper2_model_var,
+                                             values=models, style="TCombobox")
+        self.helper2_model_menu.pack(fill="x", padx=5, pady=2)
 
-        ttk.Label(self.left_sidebar, text="Conversations", style="Sidebar.TLabel").pack(pady=(10, 5), padx=10)
-        self.conversation_listbox = tk.Listbox(self.left_sidebar, bg="#2a2a3b", fg="#ffffff", font=("Roboto", 11),
-                                               borderwidth=0, highlightthickness=0, selectbackground="#5e5e8d")
-        self.conversation_listbox.pack(fill="both", expand=True, padx=10, pady=5)
+        conv_frame = tk.LabelFrame(self.left_sidebar, text="Conversations", bg="#ffffff", fg="#2d3436",
+                                  font=('Helvetica', 10, 'bold'), bd=0)
+        conv_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        buttons_frame = tk.Frame(conv_frame, bg="#ffffff")
+        buttons_frame.pack(fill="x", pady=(0, 5))
+
+        self.new_chat_btn = RoundedButton(buttons_frame, text="➕ New Chat", command=self.new_conversation,
+                                        radius=5, color="#6c5ce7", hover_color="#5649c0")
+        self.new_chat_btn.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+        self.delete_chat_btn = RoundedButton(buttons_frame, text="🗑️ Delete", command=self.delete_conversation,
+                                           radius=5, color="#fd79a8", hover_color="#d63031")
+        self.delete_chat_btn.pack(side="right", fill="x", expand=True, padx=(2, 0))
+
+        list_frame = tk.Frame(conv_frame, bg="#ffffff")
+        list_frame.pack(fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+
+        self.conversation_listbox = tk.Listbox(list_frame, bg="#ffffff", fg="#2d3436", font=("Helvetica", 10),
+                                             borderwidth=0, highlightthickness=0, selectbackground="#6c5ce7",
+                                             selectforeground="white", activestyle='none')
+        self.conversation_listbox.pack(fill="both", expand=True)
+        self.conversation_listbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.conversation_listbox.yview)
+
         self.conversation_listbox.bind("<<ListboxSelect>>", self.load_conversation)
         self.update_conversation_list()
 
-        ttk.Button(self.left_sidebar, text="New Chat", command=self.new_conversation).pack(pady=5, padx=10, fill="x")
-        ttk.Button(self.left_sidebar, text="Delete Chat", command=self.delete_conversation).pack(pady=5, padx=10, fill="x")
+        self.chat_frame = tk.Frame(self.main_frame, bg="#f5f7fa", bd=0)
+        self.chat_frame.pack(side="left", fill="both", expand=True, padx=0, pady=0)
 
-        self.chat_frame = tk.Frame(self.main_frame, bg="#ffffff", relief="flat", borderwidth=1)
-        self.chat_frame.pack(side="left", fill="both", expand=True, padx=5)
+        chat_display_frame = tk.Frame(self.chat_frame, bg="#f5f7fa")
+        chat_display_frame.pack(fill="both", expand=True, padx=15, pady=(15, 5))
 
-        self.chat_display = tk.Text(self.chat_frame, wrap="word", state="disabled", bg="#ffffff", fg="#1e1e2f",
-                                    font=("Fira Code", 11), borderwidth=0, highlightthickness=0)
-        self.chat_display.pack(fill="both", expand=True, padx=10, pady=10)
-        self.chat_display.tag_configure("role", foreground="#5e5e8d", font=("Roboto", 11, "bold"))
+        chat_header = tk.Label(chat_display_frame, text="Conversation", bg="#f5f7fa", fg="#2d3436",
+                              font=('Helvetica', 12, 'bold'), anchor="w")
+        chat_header.pack(fill="x", pady=(0, 5))
 
-        self.input_frame = tk.Frame(self.chat_frame, bg="#f0f0f5")
-        self.input_frame.pack(fill="x", padx=10, pady=10)
-        self.input_entry = ttk.Entry(self.input_frame, font=("Roboto", 11))
-        self.input_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-        self.input_entry.bind("<Return>", self.send_prompt)
-        self.send_button = ttk.Button(self.input_frame, text="Send", command=self.send_prompt, style="Accent.TButton")
-        self.style.configure("Accent.TButton", background="#5e5e8d", foreground="#ffffff")
-        self.send_button.pack(side="right")
+        chat_container = tk.Frame(chat_display_frame, bg="#ffffff", bd=0)
+        chat_container.pack(fill="both", expand=True)
 
-        self.right_sidebar = tk.Frame(self.main_frame, bg="#2a2a3b", width=150, relief="flat", borderwidth=0)
-        self.right_sidebar.pack(side="right", fill="y", padx=(5, 0))
+        chat_scrollbar = ttk.Scrollbar(chat_container)
+        chat_scrollbar.pack(side="right", fill="y")
 
-        ttk.Label(self.right_sidebar, text="Quick Start Guide", style="Sidebar.TLabel").pack(pady=(10, 5), padx=10)
-        notes_frame = tk.Frame(self.right_sidebar, bg="#2a2a3b")
-        notes_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        notes_text = tk.Text(notes_frame, wrap="word", bg="#2a2a3b", fg="#d0d0e0", font=("Roboto", 11),
-                             height=20, borderwidth=0, highlightthickness=0)
-        scrollbar = tk.Scrollbar(notes_frame, command=notes_text.yview, bg="#2a2a3b", troughcolor="#1e1e2f")
-        notes_text.config(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        notes_text.pack(side="left", fill="both", expand=True)
-        notes_text.insert("1.0", """
-                          
-• Download & install Ollama to enable app functionality.
+        self.chat_display = tk.Text(chat_container, wrap="word", state="disabled", bg="#ffffff", fg="#2d3436",
+                                  font=("Menlo", 11), borderwidth=0, highlightthickness=0,
+                                  padx=15, pady=15, spacing3=5, selectbackground="#a29bfe")
+        self.chat_display.pack(side="left", fill="both", expand=True)
+        self.chat_display.config(yscrollcommand=chat_scrollbar.set)
+        chat_scrollbar.config(command=self.chat_display.yview)
 
-• Select coding-optimized models from Ollama based on your hardware.
+        self.chat_display.tag_configure("user", foreground="#0984e3", font=("Helvetica", 10, "bold"))
+        self.chat_display.tag_configure("system", foreground="#d63031", font=("Helvetica", 10, "bold"))
+        self.chat_display.tag_configure("main_dev", foreground="#6c5ce7", font=("Helvetica", 10, "bold"))
+        self.chat_display.tag_configure("helper1", foreground="#00b894", font=("Helvetica", 10, "bold"))
+        self.chat_display.tag_configure("helper2", foreground="#fd79a8", font=("Helvetica", 10, "bold"))
+        self.chat_display.tag_configure("code", font=("Menlo", 10), background="#f1f2f6", foreground="#2d3436")
 
-• Replace the default LLMs by editing the get_available_models() method with your preferred models.
+        input_frame = tk.Frame(self.chat_frame, bg="#f5f7fa")
+        input_frame.pack(fill="x", padx=15, pady=(5, 15))
 
-• Pay attention to change also the model context window with the correct values .
+        self.input_entry = tk.Text(input_frame, height=3, bg="#ffffff", fg="#2d3436",
+                                 font=("Helvetica", 10), borderwidth=1, highlightthickness=1,
+                                 padx=10, pady=10, wrap="word", highlightbackground="#dfe6e9", highlightcolor="#6c5ce7")
+        self.input_entry.pack(side="left", fill="both", expand=True)
+        self.input_entry.bind("<Return>", lambda e: "break")
 
-• This app leverages 3 LLMs for collaboration choose wisely!
+        self.input_entry.insert("1.0", "Type your message here...")
+        self.input_entry.bind("<FocusIn>", self.clear_placeholder)
+        self.input_entry.bind("<FocusOut>", self.restore_placeholder)
 
-• Start by clicking "New Chat," naming it, and diving in.
+        input_scrollbar = ttk.Scrollbar(input_frame, command=self.input_entry.yview)
+        input_scrollbar.pack(side="right", fill="y")
+        self.input_entry.config(yscrollcommand=input_scrollbar.set)
 
-• Response times vary with hardware; Ollama shines on GPUs.
+        send_btn_frame = tk.Frame(input_frame, bg="#f5f7fa")
+        send_btn_frame.pack(side="right", padx=(5, 0))
 
-• How it works :
+        self.send_button = RoundedButton(send_btn_frame, text="Send", command=self.send_prompt_from_text,
+                                       radius=5, color="#6c5ce7", hover_color="#5649c0")
+        self.send_button.pack(pady=(0, 5))
 
-    • The Main LLM delivers the first response to your query.
-    
-    • You’ll be asked, “Was it helpful?” (Type "yes" or "no").
-    
-    • If "yes," keep chatting or start a new query.
-    
-    • If "no," describe the issue (or press Enter to skip). The Main LLM will team up with helper LLMs to refine its answer.
+        self.right_sidebar = tk.Frame(self.main_frame, bg="#ffffff", width=200)
+        self.right_sidebar.pack(side="right", fill="y", padx=0, pady=0)
+        self.right_sidebar.pack_propagate(False)
 
-• Love the app? Star us on GitHub!
-""")
-        notes_text.config(state="disabled")
+        guide_frame = tk.Frame(self.right_sidebar, bg="#ffffff")
+        guide_frame.pack(fill="x", pady=(20, 0), padx=10)
+
+        guide_title = tk.Label(guide_frame, text="App Guide", bg="#ffffff", fg="#2d3436",
+                             font=('Helvetica', 12, 'bold'))
+        guide_title.pack(anchor="w")
+
+        guide_desc = tk.Label(guide_frame, text="Need help using CodeCollab?", bg="#ffffff", fg="#636e72",
+                            font=('Helvetica', 9), anchor="w")
+        guide_desc.pack(anchor="w", pady=(0, 5))
+
+        guide_link = tk.Label(guide_frame, text="Read the App Guide →", fg="#6c5ce7", bg="#ffffff",
+                            cursor="hand2", font=('Helvetica', 10, 'bold'))
+        guide_link.pack(anchor="w")
+        guide_link.bind("<Button-1>", lambda e: webbrowser.open("https://code-collab-ai-guide.vercel.app/"))
+
+        sep = ttk.Separator(self.right_sidebar, orient="horizontal")
+        sep.pack(fill="x", pady=(15, 10), padx=10)
+
+        quick_actions = tk.LabelFrame(self.right_sidebar, text="Quick Actions", bg="#ffffff", fg="#2d3436",
+                                    font=('Helvetica', 10, 'bold'), bd=0)
+        quick_actions.pack(fill="x", padx=10, pady=(0, 10))
+
+        clear_chat_btn = RoundedButton(quick_actions, text="Clear Conversation", command=self.clear_conversation,
+                                     radius=5, color="#b2bec3", hover_color="#7f8c8d")
+        clear_chat_btn.pack(fill="x", pady=5)
+
+        export_btn = RoundedButton(quick_actions, text="Export Chat", command=self.export_conversation,
+                                 radius=5, color="#b2bec3", hover_color="#7f8c8d")
+        export_btn.pack(fill="x", pady=5)
+
+        tips_frame = tk.LabelFrame(self.right_sidebar, text="Tips", bg="#ffffff", fg="#2d3436",
+                                  font=('Helvetica', 10, 'bold'), bd=0)
+        tips_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        tips_text = tk.Text(tips_frame, wrap="word", bg="#ffffff", fg="#636e72", font=("Helvetica", 9),
+                          borderwidth=0, highlightthickness=0, padx=5, pady=5, height=10)
+        tips_text.pack(fill="both", expand=True)
+        tips_text.insert("1.0", """• Use clear and specific questions for best results
+• You can ask for code examples, explanations, or debugging help
+• The AI remembers conversation context
+• If you don't have enough hardware resources, try using smaller models
+• For code blocks, use triple backticks (```)""")
+        tips_text.config(state="disabled")
+
+        tk.Label(self.right_sidebar, bg="#ffffff").pack(fill='both', expand=True)
+
+    def configure_styles(self):
+        style = ttk.Style(self.root)
+        style.theme_use('clam')
+
+        style.configure("TLabel", font=("Helvetica", 10), background="#ffffff", foreground="#2d3436")
+        style.configure("SidebarHeader.TLabel", font=("Helvetica", 10, "bold"), foreground="#2d3436", background="#ffffff")
+        style.configure("TCombobox", font=("Helvetica", 10), selectbackground="#f5f7fa", selectforeground="#2d3436",
+                       fieldbackground="#f5f7fa", background="#ffffff", foreground="#2d3436", padding=5)
+        style.map("TCombobox", fieldbackground=[("readonly", "#f5f7fa")], background=[("readonly", "#ffffff")])
+
+        style.layout("Vertical.TScrollbar",
+                    [('Vertical.Scrollbar.trough',
+                      {'children': [('Vertical.Scrollbar.thumb',
+                                     {'expand': '1', 'sticky': 'nswe'})],
+                       'sticky': 'ns'})])
+        style.configure("Vertical.TScrollbar", troughcolor="#f5f7fa", bordercolor="#f5f7fa",
+                       arrowcolor="#2d3436", background="#dfe6e9", thickness=8)
+        style.map("Vertical.TScrollbar",
+                 background=[('active', '#6c5ce7'), ('disabled', '#f5f7fa')],
+                 arrowcolor=[('active', '#2d3436'), ('disabled', '#b2bec3')])
+
+    def clear_placeholder(self, event):
+        if self.input_entry.get("1.0", "end-1c") == "Type your message here...":
+            self.input_entry.delete("1.0", "end")
+            self.input_entry.config(fg="#2d3436")
+
+    def restore_placeholder(self, event):
+        if not self.input_entry.get("1.0", "end-1c").strip():
+            self.input_entry.delete("1.0", "end")
+            self.input_entry.insert("1.0", "Type your message here...")
+            self.input_entry.config(fg="#7f8c8d")
+
+    def send_prompt_from_text(self):
+        content = self.input_entry.get("1.0", "end-1c")
+        if content.strip() and content != "Type your message here...":
+            self.send_prompt(text_content=content)
+
+    def send_prompt(self, event=None, text_content=None):
+        if text_content is None:
+            user_input = self.input_entry.get().strip().lower()
+        else:
+            user_input = text_content.strip().lower()
+
+        self.input_entry.delete("1.0", "end")
+        self.restore_placeholder(None)
+
+        if self.state == "initial":
+            self.latest_request = user_input
+            self.chat_history.append({"role": "Programmer", "content": self.latest_request})
+            self.update_chat_display()
+            self.save_conversation()
+            threading.Thread(target=self.generate_initial_response).start()
+            self.state = "awaiting_feedback"
+        elif self.state == "awaiting_feedback":
+            if user_input in ["yes", "no"]:
+                self.chat_history.append({"role": "Programmer", "content": f"Was this helpful? {user_input}"})
+                self.update_chat_display()
+                self.save_conversation()
+                if user_input == "yes":
+                    self.chat_history.append({"role": "Main Developer", "content": "Awesome! Glad we got it right."})
+                    self.update_chat_display()
+                    self.save_conversation()
+                    self.state = "initial"
+                else:
+                    self.chat_history.append({"role": "System", "content": "Please describe what went wrong or what you expected."})
+                    self.update_chat_display()
+                    self.save_conversation()
+                    self.state = "awaiting_description"
+            else:
+                self.chat_history.append({"role": "System", "content": "Please respond with 'yes' or 'no'."})
+                self.update_chat_display()
+        elif self.state == "awaiting_description":
+            self.feedback_description = user_input if user_input else ""
+            if self.feedback_description:
+                self.chat_history.append({"role": "Programmer", "content": f"Feedback: {self.feedback_description}"})
+            else:
+                self.chat_history.append({"role": "Programmer", "content": "No specific feedback provided."})
+            self.update_chat_display()
+            self.save_conversation()
+            threading.Thread(target=self.consult_helpers).start()
+            self.state = "awaiting_feedback"
+
+    def update_chat_display(self):
+        self.chat_display.config(state="normal")
+        self.chat_display.delete("1.0", tk.END)
+
+        for entry in self.chat_history:
+            tag = ""
+            if entry["role"] == "Programmer":
+                tag = "user"
+                role_text = "You"
+            elif entry["role"] == "Main Developer":
+                tag = "main_dev"
+                role_text = "Main Developer"
+            elif entry["role"] == "Helper 1":
+                tag = "helper1"
+                role_text = "Helper 1"
+            elif entry["role"] == "Helper 2":
+                tag = "helper2"
+                role_text = "Helper 2"
+            elif entry["role"] == "System":
+                tag = "system"
+                role_text = "System"
+            else:
+                tag = ""
+                role_text = entry["role"]
+
+            self.chat_display.insert(tk.END, f"{role_text}\n", tag)
+            self.chat_display.insert(tk.END, f"{entry['content']}\n\n")
+
+        self.chat_display.config(state="disabled")
+        self.chat_display.see(tk.END)
 
     def update_conversation_list(self):
         self.conversation_listbox.delete(0, tk.END)
@@ -241,6 +480,113 @@ class CodingAssistantApp:
             self.update_chat_display()
             self.save_conversation()
             self.update_conversation_list()
+
+    def clear_conversation(self):
+        if self.current_conversation and messagebox.askyesno("Confirm", "Clear current conversation?", parent=self.root):
+            self.chat_history = []
+            self.state = "initial"
+            self.update_chat_display()
+            if self.current_conversation:
+                save_conversation(self.current_conversation, self.chat_history)
+
+    def export_conversation(self):
+        if not self.chat_history:
+            messagebox.showinfo("Info", "No conversation to export", parent=self.root)
+            return
+
+        # Debug information
+        print(f"Exporting conversation with {len(self.chat_history)} messages")
+        if len(self.chat_history) > 0:
+            first_msg = self.chat_history[0]
+            last_msg = self.chat_history[-1]
+            print(f"First message role: {first_msg.get('role')}, length: {len(str(first_msg.get('content', '')))}")
+            print(f"Last message role: {last_msg.get('role')}, length: {len(str(last_msg.get('content', '')))}")
+
+        file_path = tk.filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Export Conversation"
+        )
+
+        if not file_path:  # User cancelled the dialog
+            return
+
+        try:
+            # Create a timestamp for the export
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Build the content with proper formatting
+            content_lines = []
+            content_lines.append("CodeCollab AI Conversation Export")
+            content_lines.append("=" * 40)
+            content_lines.append(f"Date: {timestamp}")
+            content_lines.append(f"Total messages: {len(self.chat_history)}")
+            content_lines.append("=" * 40)
+            content_lines.append("")  # Add blank line
+
+            # Process each message
+            for i, entry in enumerate(self.chat_history, 1):
+                try:
+                    role = entry.get('role', 'Unknown')
+                    content = entry.get('content', '')
+
+                    # Handle content that might have encoding issues
+                    if isinstance(content, str):
+                        # Replace problematic characters
+                        content = content.replace("\r\n", "\n").replace("\r", "\n")
+                    else:
+                        content = str(content)
+
+                    # Add message to content
+                    content_lines.append(f"Message #{i}")
+                    content_lines.append(f"From: {role}")
+                    content_lines.append("Content:")
+                    content_lines.append(content)
+                    content_lines.append("-" * 20)  # Separator
+                    content_lines.append("")  # Blank line
+                except Exception as e:
+                    error_msg = f"Error processing message {i}: {str(e)}"
+                    print(error_msg)
+                    content_lines.append(error_msg)
+                    content_lines.append("-" * 20)
+                    content_lines.append("")
+
+            # Join all lines with newlines
+            full_content = "\n".join(content_lines)
+
+            # Write to file with UTF-8 encoding
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(full_content)
+
+            # Verify the file was written correctly
+            with open(file_path, 'r', encoding='utf-8') as f:
+                exported_content = f.read()
+                print(f"Exported file contains {len(exported_content)} characters")
+
+            messagebox.showinfo(
+                "Success",
+                f"Conversation exported successfully!\n\n"
+                f"File: {os.path.basename(file_path)}\n"
+                f"Location: {os.path.dirname(file_path)}\n"
+                f"Total messages: {len(self.chat_history)}",
+                parent=self.root
+            )
+        except Exception as e:
+            error_details = f"Failed to export conversation:\n\n{str(e)}"
+            print(error_details)
+            # Get traceback for more detailed error information
+            import traceback
+            full_error = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            print(full_error)
+
+            messagebox.showerror(
+                "Error",
+                f"Failed to export conversation:\n\n{str(e)}\n\n"
+                "See console for more details.",
+                parent=self.root
+            )
+
 
     def load_conversation(self, event):
         selection = self.conversation_listbox.curselection()
@@ -265,113 +611,66 @@ class CodingAssistantApp:
         if selection:
             filename = self.conversation_listbox.get(selection[0]) + ".json"
             if messagebox.askyesno("Confirm", "Delete this conversation?", parent=self.root):
-                os.remove(os.path.join(CONVERSATION_DIR, filename))
-                self.update_conversation_list()
-                if self.current_conversation == filename:
-                    self.chat_history = []
-                    self.current_conversation = None
-                    self.state = "initial"
-                    self.update_chat_display()
+                try:
+                    os.remove(os.path.join(CONVERSATION_DIR, filename))
+                    self.update_conversation_list()
+                    if self.current_conversation == filename:
+                        self.chat_history = []
+                        self.current_conversation = None
+                        self.state = "initial"
+                        self.update_chat_display()
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to delete conversation: {e}", parent=self.root)
 
     def save_conversation(self):
         if self.current_conversation:
             save_conversation(self.current_conversation, self.chat_history)
 
-    def update_chat_display(self):
-        self.chat_display.config(state="normal")
-        self.chat_display.delete("1.0", tk.END)
-        for entry in self.chat_history:
-            self.chat_display.insert(tk.END, f"[{entry['role']}] ", "role")
-            self.chat_display.insert(tk.END, f"{entry['content']}\n\n")
-        self.chat_display.config(state="disabled")
-        self.chat_display.see(tk.END)
-
-    def send_prompt(self, event=None):
-        user_input = self.input_entry.get().strip().lower()
-        self.input_entry.delete(0, tk.END)
-        if self.state == "initial":
-            self.latest_request = user_input
-            self.chat_history.append({"role": "Programmer", "content": self.latest_request})
-            self.update_chat_display()
-            self.save_conversation()
-            threading.Thread(target=self.generate_initial_response).start()
-            self.state = "awaiting_feedback"
-        elif self.state == "awaiting_feedback":
-            if user_input in ["yes", "no"]:
-                self.chat_history.append({"role": "Programmer", "content": f"Was this helpful? {user_input}"})
-                self.update_chat_display()
-                self.save_conversation()
-                if user_input == "yes":
-                    self.chat_history.append({"role": "Main Developer", "content": "Awesome! Glad we got it right."})
-                    self.update_chat_display()
-                    self.save_conversation()
-                    self.state = "initial"
-                else:
-                    self.chat_history.append({"role": "System", "content": "Please describe what went wrong or what you expected. (Press Enter to skip)"})
-                    self.update_chat_display()
-                    self.save_conversation()
-                    self.state = "awaiting_description"
-            else:
-                self.chat_history.append({"role": "System", "content": "Please respond with 'yes' or 'no'."})
-                self.update_chat_display()
-        elif self.state == "awaiting_description":
-            self.feedback_description = user_input if user_input else ""
-            if self.feedback_description:
-                self.chat_history.append({"role": "Programmer", "content": f"Feedback: {self.feedback_description}"})
-            else:
-                self.chat_history.append({"role": "Programmer", "content": "No specific feedback provided."})
-            self.update_chat_display()
-            self.save_conversation()
-            threading.Thread(target=self.consult_helpers).start()
-            self.state = "awaiting_feedback"
-
     def generate_initial_response(self):
         if not self.main_llm:
-            self.main_llm = OllamaLLM(model=self.main_model_var.get()) 
-            self.helper1_llm = OllamaLLM(model=self.helper1_model_var.get())  
+            self.main_llm = OllamaLLM(model=self.main_model_var.get())
+            self.helper1_llm = OllamaLLM(model=self.helper1_model_var.get())
             self.helper2_llm = OllamaLLM(model=self.helper2_model_var.get())
         prompt = create_initial_prompt(self.latest_request, self.chat_history)
-        self.latest_main_response = self.main_llm.invoke(prompt) 
+        self.latest_main_response = self.main_llm.invoke(prompt)
         self.chat_history.append({"role": "Main Developer", "content": self.latest_main_response})
         self.chat_history.append({"role": "System", "content": "Was this response helpful? (yes/no)"})
         self.update_chat_display()
         self.save_conversation()
 
     def consult_helpers(self):
+        helper_prompt = create_helper_prompt(self.latest_request, self.latest_main_response,
+                                          self.chat_history, self.feedback_description)
 
-        helper_prompt = create_helper_prompt(self.latest_request, self.latest_main_response, self.chat_history, self.feedback_description)
-        
-        
         self.helper1_response = self.helper1_llm.invoke(helper_prompt)
         self.chat_history.append({"role": "Helper 1", "content": self.helper1_response})
         self.update_chat_display()
         self.save_conversation()
-        
-        
+
         self.helper2_response = self.helper2_llm.invoke(helper_prompt)
         self.chat_history.append({"role": "Helper 2", "content": self.helper2_response})
         self.update_chat_display()
         self.save_conversation()
-        
-        
-        improved_prompt = create_improved_prompt(self.latest_request, self.chat_history, self.latest_main_response, 
-                                                self.helper1_response, self.helper2_response, self.feedback_description)
-        
-        
+
+        improved_prompt = create_improved_prompt(self.latest_request, self.chat_history,
+                                               self.latest_main_response,
+                                               self.helper1_response, self.helper2_response,
+                                               self.feedback_description)
+
         total_tokens = estimate_tokens(improved_prompt)
         main_model = self.main_model_var.get()
         if main_model in MODEL_CONTEXT_WINDOWS:
             context_window = MODEL_CONTEXT_WINDOWS[main_model]
             if total_tokens > 0.8 * context_window:
-               
                 summary_prompt = "Your previous response was too long. Please provide a concise summary in 2-3 sentences."
                 helper1_summary = self.helper1_llm.invoke(summary_prompt)
                 helper2_summary = self.helper2_llm.invoke(summary_prompt)
-               
-                improved_prompt = create_improved_prompt(self.latest_request, self.chat_history, self.latest_main_response, 
-                                                        helper1_summary, helper2_summary, self.feedback_description)
-        
-        
+
+                improved_prompt = create_improved_prompt(self.latest_request, self.chat_history,
+                                                       self.latest_main_response,
+                                                       helper1_summary, helper2_summary,
+                                                       self.feedback_description)
+
         self.latest_main_response = self.main_llm.invoke(improved_prompt)
         self.chat_history.append({"role": "Main Developer", "content": self.latest_main_response})
         self.chat_history.append({"role": "System", "content": "Was this response helpful? (yes/no)"})
