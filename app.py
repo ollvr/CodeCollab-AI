@@ -5,6 +5,8 @@ from tkinter import ttk, filedialog, messagebox , simpledialog
 import threading
 import webbrowser
 from langchain_ollama import OllamaLLM
+import traceback
+from datetime import datetime
 
 CONVERSATION_DIR = "conversations"
 if not os.path.exists(CONVERSATION_DIR):
@@ -494,7 +496,6 @@ class CodingAssistantApp:
             messagebox.showinfo("Info", "No conversation to export", parent=self.root)
             return
 
-        # Debug information
         print(f"Exporting conversation with {len(self.chat_history)} messages")
         if len(self.chat_history) > 0:
             first_msg = self.chat_history[0]
@@ -508,43 +509,35 @@ class CodingAssistantApp:
             title="Export Conversation"
         )
 
-        if not file_path:  # User cancelled the dialog
+        if not file_path:
             return
 
-        try:
-            # Create a timestamp for the export
-            from datetime import datetime
+        try:       
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            # Build the content with proper formatting
             content_lines = []
             content_lines.append("CodeCollab AI Conversation Export")
             content_lines.append("=" * 40)
             content_lines.append(f"Date: {timestamp}")
             content_lines.append(f"Total messages: {len(self.chat_history)}")
             content_lines.append("=" * 40)
-            content_lines.append("")  # Add blank line
-
-            # Process each message
+            content_lines.append("")
             for i, entry in enumerate(self.chat_history, 1):
                 try:
                     role = entry.get('role', 'Unknown')
                     content = entry.get('content', '')
 
-                    # Handle content that might have encoding issues
                     if isinstance(content, str):
-                        # Replace problematic characters
+                        
                         content = content.replace("\r\n", "\n").replace("\r", "\n")
                     else:
                         content = str(content)
 
-                    # Add message to content
                     content_lines.append(f"Message #{i}")
                     content_lines.append(f"From: {role}")
                     content_lines.append("Content:")
                     content_lines.append(content)
-                    content_lines.append("-" * 20)  # Separator
-                    content_lines.append("")  # Blank line
+                    content_lines.append("-" * 20)
+                    content_lines.append("")
                 except Exception as e:
                     error_msg = f"Error processing message {i}: {str(e)}"
                     print(error_msg)
@@ -552,14 +545,14 @@ class CodingAssistantApp:
                     content_lines.append("-" * 20)
                     content_lines.append("")
 
-            # Join all lines with newlines
+            
             full_content = "\n".join(content_lines)
 
-            # Write to file with UTF-8 encoding
+           
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(full_content)
 
-            # Verify the file was written correctly
+            
             with open(file_path, 'r', encoding='utf-8') as f:
                 exported_content = f.read()
                 print(f"Exported file contains {len(exported_content)} characters")
@@ -575,8 +568,7 @@ class CodingAssistantApp:
         except Exception as e:
             error_details = f"Failed to export conversation:\n\n{str(e)}"
             print(error_details)
-            # Get traceback for more detailed error information
-            import traceback
+            
             full_error = "".join(traceback.format_exception(type(e), e, e.__traceback__))
             print(full_error)
 
